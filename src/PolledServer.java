@@ -5,11 +5,20 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Queue;
+import java.util.concurrent.ThreadLocalRandom;
 
 public class PolledServer {
     public static ArrayList<Socket> sockets = new ArrayList<>();
+    private static Integer token;
+
+    private static synchronized void updateToken(Integer newToken, int port) {
+        token = newToken;
+        System.out.println("Got new token value from " +port+": " + token);
+    }
 
     public static void main(String[] args) {
+        token = ThreadLocalRandom.current().nextInt(0,  30);
+        System.out.println("Token initial value is: " + token);
         try (ServerSocket serversocket = new ServerSocket(4321)) {
             while(true) {
                 System.out.println("Waiting for new connections...");
@@ -18,23 +27,27 @@ public class PolledServer {
                 new Thread() {
                     public void run() {
                         try {
-                            Socket sckt = socket;
-                            System.out.println("New socket at port: " + sckt.getPort());
-                            ObjectInputStream ois = new ObjectInputStream(sckt.getInputStream());
-                            ObjectOutputStream oos = new ObjectOutputStream(sckt.getOutputStream());
-                            System.out.println("test");
-                            while (true) {
+                            int port = socket.getPort();
+                            System.out.println("New socket at port: " + port);
+                            ObjectOutputStream oos = new ObjectOutputStream(socket.getOutputStream());
+                            ObjectInputStream ois = new ObjectInputStream(socket.getInputStream());
+                            String string = "";
+                            while (!string.equals("EXIT")) {
                                 try {
-                                    System.out.println("Waiting to read...");
-                                    String string = (String)ois.readObject();
+                                    string = (String)ois.readObject();
                                     if(string.equals("REQ")) {
-                                        oos.writeObject("Cool");
+                                        Thread.sleep(1000);
+                                        oos.writeObject(token);
+                                        updateToken((Integer)ois.readObject(), port);
                                     }
-                                    Thread.sleep(1000);
                                 } catch (InterruptedException | ClassNotFoundException e) {
                                     e.printStackTrace();
                                 }
                             }
+                            ois.close();
+                            oos.close();
+                            socket.close();
+                            System.out.println("Closed socket connection at port: " + port);
                         } catch(IOException e) {
                             e.printStackTrace();
                         }
